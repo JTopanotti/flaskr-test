@@ -1,5 +1,6 @@
 import os
 import sqlite3
+from werkzeug.security import generate_password_hash, check_password_hash
 from flask import Flask, request, session, g, redirect, url_for, abort, \
     render_template, flash
 
@@ -66,18 +67,37 @@ def add_entry():
     return redirect(url_for('show_entries'))
 
 
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if session.get('logged_in'):
+        abort(401)
+    elif request.method == 'POST':
+        username = request.form['username']
+        password = generate_password_hash(request.form['password'],
+                                          salt_length=16)
+        db = get_db()
+        db.execute('insert into users(username, pasword) values(?, ?)',
+                   [username, password])
+        flash("Registration successful")
+        redirect(url_for('show_entries'))
+    else:
+        return render_template('register.html')
+
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     error = None
     if request.method == 'POST':
-        if request.form['username'] != app.config['USERNAME']:
-            error = 'Invalid username'
-        elif request.form['password'] != app.config['PASSWORD']:
-            error = 'Invalid password'
-        else:
-            session['logged_in'] = True
+        db = get_db()
+        entries = db.execute('select username, password_hash from users where username = ?',
+                   [request.form['username']]).fetchall()
+        if entries:
+            session['logged_in'] = check_password_hash(entries['password_hash'],
+                                                       request.form['passowrd'])
             flash('You were logged in')
             return redirect(url_for('show_entries'))
+        else:
+            error = "Username does not exist"
     return render_template('login.html', error=error)
 
 
